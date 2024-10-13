@@ -13,6 +13,7 @@ local M = {
     zshrc = false,
     filetypes = {"*"},
   },
+  env = {},
   capture_script_path = capture_script_path_base .. 'cmp_capture.zsh'
 }
 
@@ -83,7 +84,8 @@ M.complete = function(self, request, callback)
   do
     local spawn_params = {
       args = { self.capture_script_path, q },
-      stdio = stdioe
+      stdio = stdioe,
+      env = self.env,
     }
 
     handle, pid = luv.spawn('zsh', spawn_params, function(code, signal)
