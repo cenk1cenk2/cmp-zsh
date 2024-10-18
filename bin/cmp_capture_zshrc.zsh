@@ -6,7 +6,7 @@ zmodload zsh/zpty || { echo 'error: missing module zsh/zpty' >&2; exit 1 }
 zpty z zsh -i
 
 # Disable history for commands starting with a space
-zpty -w z ' setopt histignorespace'
+zpty -w z ' setopt histignorespace' &> /dev/null
 
 # line buffer for pty output
 local line
