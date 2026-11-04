@@ -1,7 +1,8 @@
 #!/usr/bin/env zsh
 
-# line buffer for pty output
-local line
+# line buffer for pty output; assigned, since re-declaring the one the zshrc
+# script already set prints its value onto stdout as a bogus completion
+local line=
 
 setopt rcquotes
 () {
