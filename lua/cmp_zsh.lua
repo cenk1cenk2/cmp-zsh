@@ -12,6 +12,7 @@ local M = {
   config = {
     zshrc = false,
     filetypes = {"*"},
+    timeout = 3000,
   },
   env = {},
   capture_script_path = capture_script_path_base .. 'cmp_capture.zsh'
@@ -89,31 +90,77 @@ M.complete = function(self, request, callback)
   -- local q = string.sub(request.context.cursor_before_line, request.offset)
   local q = request.context.cursor_before_line
   local stdioe = pipes()
-  local handle, pid
+  local handle, pid, timer
   local buf = ''
   local words = {}
+  local superseded = false
+
+  -- the capture script runs its own zsh in a pty, so signal the whole group
+  local kill = function()
+    if pid then
+      pcall(luv.kill, -pid, 'sigterm')
+    end
+  end
+  local cancel = function()
+    superseded = true
+    kill()
+  end
+
+  -- a newer request replaces this one; the zsh behind the old one has nothing
+  -- left to answer and would otherwise run to completion on every keystroke
+  if self.cancel_running then
+    self.cancel_running()
+  end
 
   do
     local spawn_params = {
       args = { self.capture_script_path, q },
       stdio = stdioe,
       env = environment(self.env),
+      detached = true,
     }
 
     handle, pid = luv.spawn('zsh', spawn_params, function(code, signal)
-      stdioe[1]:close()
-      stdioe[2]:close()
-      stdioe[3]:close()
+      if timer then
+        timer:stop()
+        timer:close()
+      end
+      for _, pipe in ipairs(stdioe) do
+        if not pipe:is_closing() then
+          pipe:close()
+        end
+      end
       handle:close()
-      vim.schedule_wrap(callback)(result(words))
+      if self.cancel_running == cancel then
+        self.cancel_running = nil
+      end
+      if not superseded then
+        vim.schedule_wrap(callback)(result(words))
+      end
     end)
 
     if handle == nil then
-      debug.log(string.format("start zsh failed: %s", pid))
+      for _, pipe in ipairs(stdioe) do
+        pipe:close()
+      end
+      vim.notify(string.format('cmp-zsh: starting zsh failed: %s', pid), vim.log.levels.ERROR)
+      callback(result({}))
+      return
     end
 
+    self.cancel_running = cancel
+
+    -- a completion function that never returns would leave zsh running forever
+    timer = luv.new_timer()
+    timer:start(M.config.timeout, 0, kill)
+
+    -- drained so a chatty zsh cannot fill the pipe and block
+    luv.read_start(stdioe[3], function() end)
+
     luv.read_start(stdioe[2], function(err, chunk)
-      assert(not err, err)
+      if err then
+        return
+      end
       if chunk then
         buf = buf .. chunk
       end
