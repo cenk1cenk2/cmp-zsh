@@ -20,6 +20,7 @@ local M = {
 M.setup = function(opts)
   opts = vim.tbl_deep_extend('keep', opts, M.config)
   M.config = opts
+  M.env = opts.env or {}
 
   local script = opts.zshrc and 'cmp_capture_zshrc.zsh' or 'cmp_capture.zsh'
   M.capture_script_path = capture_script_path_base .. script
@@ -66,6 +67,17 @@ local result = function(words)
   return { items = items, isIncomplete = true }
 end
 
+-- luv replaces the whole environment when given one, so inherit nvim's and
+-- layer the configured variables over it as NAME=value pairs
+local environment = function(extra)
+  local env = vim.tbl_extend('force', vim.fn.environ(), extra)
+  local pairs_ = {}
+  for k, v in pairs(env) do
+    table.insert(pairs_, k .. '=' .. tostring(v))
+  end
+  return pairs_
+end
+
 local pipes = function()
   local stdin = luv.new_pipe(false)
   local stdout = luv.new_pipe(false)
@@ -85,7 +97,7 @@ M.complete = function(self, request, callback)
     local spawn_params = {
       args = { self.capture_script_path, q },
       stdio = stdioe,
-      env = self.env,
+      env = environment(self.env),
     }
 
     handle, pid = luv.spawn('zsh', spawn_params, function(code, signal)

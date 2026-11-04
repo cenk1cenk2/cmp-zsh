@@ -2,11 +2,9 @@
 
 zmodload zsh/zpty || { echo 'error: missing module zsh/zpty' >&2; exit 1 }
 
-# spawn shell
-zpty z zsh -i
-
-# Disable history for commands starting with a space
-zpty -w z ' setopt histignorespace' &> /dev/null
+# spawn shell, ignoring space-prefixed lines from the start: turning the option
+# on with a typed command recorded that command itself in history
+zpty z zsh -o histignorespace -i
 
 # line buffer for pty output
 local line
